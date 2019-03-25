@@ -34,7 +34,7 @@ m = 5
 conv_sizes = np.random.choice(np.arange(1, padding_size), size=5, replace=False)
 input_size = embedding_dim + f * m
 hidden_size = 20
-num_layers = 1
+num_layers = 2
 
 batch_size = 32
 lr_D = 0.01
@@ -64,7 +64,7 @@ generator = Generator(vocab_size=vocab_size, embedding_dim=embedding_dim, input_
 
 optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=lr_D)
 optimizer_G = torch.optim.Adam(generator.parameters(), lr=lr_G)
-
+loss = nn.MSELoss()
 
 # -------------------------------------- Training ----------------------------------------------
 for epoch in range(2):
@@ -79,18 +79,24 @@ for epoch in range(2):
             # given sentence vector, generator generate a fake sentence
             g_input = None
             h, c = generator.initHidden(batch_z)
-            batch_fake_x = []
+            batch_fake_x = torch.zeros((batch_size, padding_size), dtype=torch.long)  # (batch_size, padding_size)
             for sent_step in range(padding_size):
                 batch_y, h, c = generator(g_input, batch_z, h, c, word_embeddings)
-                batch_fake_x.append(batch_y)
+                batch_fake_x[:, sent_step] = torch.squeeze(batch_y, dim=1)
                 g_input = batch_y.detach()
-            batch_fake_x = torch.cat(batch_fake_x, dim=1)  # (batch_size, padding_size)
+
+
+            # h, c = generator.initHidden(batch_z)
+            # batch_fake_x, h, c = generator(batch_x, batch_z, h, c, word_embeddings)
+            
+            
             # discriminator predict for the fake sentence
             batch_pred_fake_x, batch_fake_z = discriminator(batch_fake_x, word_embeddings)
             # compute generator loss and update
             z_mean = torch.mean(batch_z, dim=0)  # (batch_size, fm) => (fm)
             fake_z_mean = torch.mean(batch_fake_z, dim=0)  # (batch_size, fm) => (fm)
             G_loss = torch.sqrt(torch.mean((z_mean - fake_z_mean)**2))  # scalar
+            # G_loss = loss(fake_z_mean, z_mean)
             optimizer_G.zero_grad()
             G_loss.backward(retain_graph=True)
             optimizer_G.step()
@@ -107,3 +113,5 @@ for epoch in range(2):
         # evaluate()
 
         
+# generator loss does not change
+# not following reasons: generate step by step; loss function; 

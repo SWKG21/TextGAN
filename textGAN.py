@@ -55,6 +55,7 @@ class Generator(nn.Module):
         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
         self.linear = nn.Linear(in_features=hidden_size, out_features=vocab_size)
         self.softmax = nn.LogSoftmax(dim=1)
+        # self.softmax = nn.LogSoftmax(dim=2)
 
         self.init = [nn.Linear(in_features=fm, out_features=hidden_size) for i in range(num_layers)]
         # self.init = nn.Linear(in_features=fm, out_features=hidden_size)
@@ -71,8 +72,8 @@ class Generator(nn.Module):
             y = torch.argmax(input=softmax_out, dim=1, keepdim=True)  # (batch_size, 1)
             return y, h, c
         else:
-            embed = word_embeddings(x)  # (batch_size, 1, embedding_size)
-            embed = torch.squeeze(embed, dim=1)  # (batch_size, embedding_size)
+            embed = word_embeddings(x)  # (batch_size, 1, embedding_dim)
+            embed = torch.squeeze(embed, dim=1)  # (batch_size, embedding_dim)
             # z with (batch_size, fm)
             lstm_in = torch.cat(tensors=[embed, z], dim=1)  # (batch_size, embedding_dim+fm)
             # LSTM input need 3 dimensions
@@ -84,6 +85,21 @@ class Generator(nn.Module):
             softmax_out = self.softmax(softmax_in)  # (batch_size, vocab_size)
             y = torch.argmax(input=softmax_out, dim=1, keepdim=True)  # (batch_size, 1)
             return y, next_h, next_c
+
+
+    # def forward(self, x, z, h, c, word_embeddings):
+    #     embed = word_embeddings(x)  # (batch_size, padding_size, embedding_dim)
+    #     # z with (batch_size, fm)
+    #     z = torch.unsqueeze(z, dim=1) # (batch_size, 1, fm)
+    #     z = torch.cat([z]*x.size()[1], dim=1)  # (batch_size, padding_size, fm)
+    #     lstm_in = torch.cat([embed, z], dim=2)  # (batch_size, padding_size, embedding_dim+fm)
+    #     lstm_out, (next_h, next_c) = self.lstm(lstm_in, (h, c))  # (batch_size, padding_size, hidden_size)
+    #     softmax_in = self.linear(lstm_out)  # (batch_size, padding_size, vocab_size)
+    #     softmax_out = self.softmax(softmax_in)  # (batch_size, padding_size, vocab_size)
+    #     fake_x = torch.argmax(softmax_out, dim=2, keepdim=True)  # (batch_size, padding_size, 1)
+    #     fake_x = torch.squeeze(fake_x, dim=2)  # (batch_size, padding_size)
+    #     return fake_x, next_h, next_c
+
 
 
     def initHidden(self, z):
