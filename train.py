@@ -3,16 +3,17 @@ import pickle
 from textGAN import *
 from torch.utils.data import TensorDataset, DataLoader
 import torch.nn as nn
+from utils import MMD
 
 
 # ------------------------------- Load data & set parameters -----------------------------------
 
-x = pickle.load(open('../data/data.p', 'rb'))    
-train = x[0]
-val = x[1]
-# test = x[2]
-wordtoix, ixtoword = x[9], x[10]
-del x
+data = pickle.load(open('../data/data.p', 'rb'))    
+train = data[0]
+val = data[1]
+# test = data[2]
+wordtoix, ixtoword = data[9], data[10]
+del data
 
 vocab_size = len(wordtoix)
 del wordtoix, ixtoword
@@ -32,11 +33,13 @@ embedding_dim = 30
 f = 10
 m = 5
 conv_sizes = np.random.choice(np.arange(1, padding_size), size=5, replace=False)
-input_size = embedding_dim + f * m
+
+# generator parameters
+latent_size = 10
 hidden_size = 20
 num_layers = 2
 
-batch_size = 32
+batch_size = 2
 lr_D = 0.01
 lr_G = 0.01
 
@@ -49,66 +52,66 @@ val = [sent+[0]*(padding_size-len(sent)) for sent in val]
 
 # batch preparation
 train_dataset = TensorDataset(torch.tensor(train))
-train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+gen_train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+disc_train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
+gen_train_loader_iter = iter(gen_train_loader)
+disc_train_loader_iter = iter(disc_train_loader)
+
 val_dataset = TensorDataset(torch.tensor(val))
-val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True)
+gen_val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True)
+disc_val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True)
+
 # test_dataset = TensorDataset(torch.tensor(test))
-# test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
+# gen_test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
+# disc_test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
 
 
 # ----------------------------- Initialize GAN & optimizer--------------------------------------
 
 word_embeddings = nn.Embedding(num_embeddings=vocab_size, embedding_dim=embedding_dim)
-discriminator = Discriminator(vocab_size=vocab_size, embedding_dim=embedding_dim, padding_size=padding_size, f=f, conv_sizes=conv_sizes)
-generator = Generator(vocab_size=vocab_size, embedding_dim=embedding_dim, input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, fm=f*m, batch_size=batch_size)
+discriminator = Discriminator(embedding_dim=embedding_dim, padding_size=padding_size, f=f, conv_sizes=conv_sizes, latent_size=latent_size)
+generator = Generator(vocab_size=vocab_size, embedding_dim=embedding_dim, hidden_size=hidden_size, num_layers=num_layers, latent_size=latent_size, batch_size=batch_size, padding_size=padding_size)
 
 optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=lr_D)
 optimizer_G = torch.optim.Adam(generator.parameters(), lr=lr_G)
 loss = nn.MSELoss()
 
 # -------------------------------------- Training ----------------------------------------------
-for epoch in range(2):
-    
-    for d_step, batch in enumerate(train_loader):
-        print ('\n d-step', d_step)
-        # given input sentence, discriminator output prediction and sentence vector
-        batch_x = batch[0]  # (batch_size, padding_size)
-        batch_pred_x, batch_z = discriminator(batch_x, word_embeddings)
-
-        for g_step in range(5):
-            # given sentence vector, generator generate a fake sentence
-            g_input = None
-            h, c = generator.initHidden(batch_z)
-            batch_fake_x = torch.zeros((batch_size, padding_size), dtype=torch.long)  # (batch_size, padding_size)
-            for sent_step in range(padding_size):
-                batch_y, h, c = generator(g_input, batch_z, h, c, word_embeddings)
-                batch_fake_x[:, sent_step] = torch.squeeze(batch_y, dim=1)
-                g_input = batch_y.detach()
-
-
-            # h, c = generator.initHidden(batch_z)
-            # batch_fake_x, h, c = generator(batch_x, batch_z, h, c, word_embeddings)
-            
-            
-            # discriminator predict for the fake sentence
-            batch_pred_fake_x, batch_fake_z = discriminator(batch_fake_x, word_embeddings)
-            # compute generator loss and update
-            z_mean = torch.mean(batch_z, dim=0)  # (batch_size, fm) => (fm)
-            fake_z_mean = torch.mean(batch_fake_z, dim=0)  # (batch_size, fm) => (fm)
-            G_loss = torch.sqrt(torch.mean((z_mean - fake_z_mean)**2))  # scalar
-            # G_loss = loss(fake_z_mean, z_mean)
-            optimizer_G.zero_grad()
-            G_loss.backward(retain_graph=True)
-            optimizer_G.step()
-            print ('generator loss at step %d %.4f' % (g_step, G_loss))
+for epoch in range(10):
+    print ('\nepoch', epoch)
+    for g_step in range(5):
+        # generator generate a batch of fake sentences
+        batch_fake_s, _ = generator.generate(word_embeddings)
+        # load s        
+        batch_s = next(gen_train_loader_iter)[0]
+        # discriminator predict for both real s and the fake sentence
+        _, _, batch_fake_s_vec = discriminator(batch_fake_s, word_embeddings)
+        _, _, batch_s_vec = discriminator(batch_s, word_embeddings)
+        # compute generator loss and update
+        G_loss = MMD(batch_fake_s_vec, batch_s_vec)  # minimize MMD (f and f_tilde to be similar)
+        optimizer_G.zero_grad()
+        G_loss.backward(retain_graph=True)
+        optimizer_G.step()
+        print ('generator loss at step %d %.4f' % (g_step, G_loss))
         
-        
+    for d_step in range(1):
+        # generator generate a batch of fake sentences
+        batch_fake_s, batch_z = generator.generate(word_embeddings)
+        # load s        
+        batch_s = next(disc_train_loader_iter)[0]
+        # discriminator predict for both real s and the fake sentence
+        batch_pred_fake_s, batch_recon_z, batch_fake_s_vec = discriminator(batch_fake_s, word_embeddings)
+        batch_pred_s, _, batch_s_vec = discriminator(batch_s, word_embeddings)
         # compute discriminator loss and update
-        D_loss = - torch.mean(torch.log(batch_pred_x) + torch.log(1. - batch_pred_fake_x))
+        gan_loss = - torch.mean(torch.log(batch_pred_s) - torch.log(1. - batch_pred_fake_s))  # minimize gan_loss (f and f_tilde to be discriminative)
+        mmd_loss = MMD(batch_fake_s_vec, batch_s_vec)  # maximize MMD (f and f_tilde to be challenging)
+        recon_loss = torch.mean(torch.norm(input=batch_recon_z-batch_z, p=2, dim=1))  # minimize recon_loss (f and f_tilde to be representative)
+        D_loss = gan_loss - 0.1 * mmd_loss + 0.1 * recon_loss
         optimizer_D.zero_grad()
         D_loss.backward(retain_graph=True)
         optimizer_D.step()
         print ('discriminator loss at step %d %.4f' % (d_step, D_loss))
+
 
         # evaluate()
 
