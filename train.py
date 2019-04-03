@@ -11,7 +11,7 @@ from utils import MMD
 data = pickle.load(open('../data/data.p', 'rb'))    
 train = data[0]
 val = data[1]
-# test = data[2]
+test = data[2]
 wordtoix, ixtoword = data[9], data[10]
 del data
 
@@ -24,9 +24,9 @@ for sent in train:
 for sent in val:
     if len(sent) > padding_size:
         padding_size = len(sent)   
-# for sent in test:
-#     if len(sent) > padding_size:
-#         padding_size = len(sent)
+for sent in test:
+    if len(sent) > padding_size:
+        padding_size = len(sent)
 
 embedding_dim = 30
 # f filters with m different sizes
@@ -39,7 +39,7 @@ latent_size = 10
 hidden_size = 20
 num_layers = 2
 
-batch_size = 2
+batch_size = 64
 lr_D = 0.01
 lr_G = 0.01
 
@@ -48,7 +48,7 @@ lr_G = 0.01
 # padding
 train = [sent+[0]*(padding_size-len(sent)) for sent in train]
 val = [sent+[0]*(padding_size-len(sent)) for sent in val]
-# test = [sent+[0]*(padding_size-len(sent)) for sent in test]
+test = [sent+[0]*(padding_size-len(sent)) for sent in test]
 
 # batch preparation
 train_dataset = TensorDataset(torch.tensor(train))
@@ -61,9 +61,9 @@ val_dataset = TensorDataset(torch.tensor(val))
 gen_val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True)
 disc_val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, shuffle=True)
 
-# test_dataset = TensorDataset(torch.tensor(test))
-# gen_test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
-# disc_test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
+test_dataset = TensorDataset(torch.tensor(test))
+gen_test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
+disc_test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=True)
 
 
 # ----------------------------- Initialize GAN & optimizer--------------------------------------
@@ -74,11 +74,9 @@ generator = Generator(vocab_size=vocab_size, embedding_dim=embedding_dim, hidden
 
 optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=lr_D)
 optimizer_G = torch.optim.Adam(generator.parameters(), lr=lr_G)
-loss = nn.MSELoss()
 
 # -------------------------------------- Training ----------------------------------------------
-for epoch in range(10):
-    print ('\nepoch', epoch)
+for epoch in range(1000):
     for g_step in range(5):
         # generator generate a batch of fake sentences
         batch_fake_s, _ = generator.generate(word_embeddings)
@@ -92,7 +90,6 @@ for epoch in range(10):
         optimizer_G.zero_grad()
         G_loss.backward(retain_graph=True)
         optimizer_G.step()
-        print ('generator loss at step %d %.4f' % (g_step, G_loss))
         
     for d_step in range(1):
         # generator generate a batch of fake sentences
@@ -110,11 +107,11 @@ for epoch in range(10):
         optimizer_D.zero_grad()
         D_loss.backward(retain_graph=True)
         optimizer_D.step()
-        print ('discriminator loss at step %d %.4f' % (d_step, D_loss))
+    
+    print ('\ngenerator loss: %.4f' % G_loss.item())
+    print ('discriminator loss: %.4f' % D_loss.item())
 
-
-        # evaluate()
-
-        
-# generator loss does not change
-# not following reasons: generate step by step; loss function; 
+#     if epoch % 2 == 0:
+#         print ('\nepoch', epoch)
+#         print ('generator loss', G_loss.item())
+#         print ('discriminator loss', D_loss.item())

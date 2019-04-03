@@ -7,15 +7,16 @@ import torch.nn.functional as F
 
 
 class Discriminator(nn.Module):
+    """
+        Input padding_size words, output shape (embedding_dim, padding_size).
+        Conv2D kernel size (embedding_dim, h), output shape (1, padding_size-h+1).
+        MaxPooling output shape (1, 1).
+        f filters with m difference sizes, output shape fm.
+        2 outputs: Linear output shape 1, Linear output shape latent_size.
+    """
 
     def __init__(self, embedding_dim, padding_size, f, conv_sizes, latent_size):
-        """
-            Input padding_size words, output shape (embedding_dim, padding_size).
-            Conv2D kernel size (embedding_dim, h), output shape (1, padding_size-h+1).
-            MaxPooling output shape (1, 1).
-            f filters with m difference sizes, output shape fm.
-            2 outputs: Linear output shape 1, Linear output shape latent_size.
-        """
+        
         super(Discriminator, self).__init__()
         
         self.conv = []
@@ -30,7 +31,10 @@ class Discriminator(nn.Module):
 
 
     def forward(self, s, word_embeddings):
-        # s is a sequence
+        """
+            Input: sequence s
+            Output: prediction, reconstructed latent code, sentence encoding
+        """
         embed = word_embeddings(s)  # (batch_size, padding_size, embedding_dim)
         embed = torch.unsqueeze(input=embed, dim=1)  # (batch_size, 1, padding_size, embedding_dim)
         tmp_outputs = []
@@ -67,7 +71,11 @@ class Generator(nn.Module):
 
 
     def forward(self, x, z, h, c, word_embeddings):
-        # x is a word because generator forward step by step
+        """
+            Generate word by word.
+            Input: word x (optional), latent code z, hidden state h and cell state c;
+            Output for next step: current output word y, current hidden state and cell state.
+        """
         if x is None:
             softmax_in = self.linear(h[-1])  # (batch_size, vocab_size)
             softmax_out = self.softmax(softmax_in)  # (batch_size, vocab_size)
@@ -90,7 +98,10 @@ class Generator(nn.Module):
 
 
     def initHidden(self, z):
-        # z with (batch_size, latent_size)
+        """
+            Initialize the hidden state and then cell state using the latent code z.
+            z shape: (batch_size, latent_size)
+        """
         h = [torch.unsqueeze(torch.tanh(self.init[i](z)), dim=0) for i in range(self.num_layers)]  # (num_layers, batch_size, hidden_size)
         h = torch.cat(h, dim=0)  # (num_layers, batch_size, hidden_size)
         c = torch.zeros(self.num_layers, self.batch_size, self.hidden_size)  # (num_layers, batch_size, hidden_size)
@@ -98,7 +109,9 @@ class Generator(nn.Module):
 
 
     def generate(self, word_embeddings):
-        # sample latent code, generate a fake sentence step by step
+        """
+            sample latent code, generate a fake sentence step by step.
+        """
         batch_z = torch.FloatTensor(np.random.uniform(low=-0.01, high=0.01, size=(self.batch_size, self.latent_size)))
         g_input = None
         h, c = self.initHidden(batch_z)

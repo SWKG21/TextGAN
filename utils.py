@@ -52,6 +52,9 @@ def gaussian_kernel_matrix(x, y, sigmas=None):
 
 
 def MMD(x, y):
+    """
+        compute Maximum Mean Discrepancy of 2 vectors.
+    """
     matx = gaussian_kernel_matrix(x, x)  # (num_x_samples, num_x_samples)
     maty = gaussian_kernel_matrix(y, y)  # (num_y_samples, num_y_samples)
     matxy = gaussian_kernel_matrix(x, y)  # (num_x_samples, num_y_samples)
