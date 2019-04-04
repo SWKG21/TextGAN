@@ -1,6 +1,6 @@
 # TextGAN
 
-Project of course "Structured Data: Learning, Prediction Dependency, Testing" of Master Data Sciences (École Polytechnique).
+This is a project of course "Structured Data: Learning, Prediction Dependency, Testing" of Master Data Sciences at École Polytechnique.
 
 ## Prerequisite
 
